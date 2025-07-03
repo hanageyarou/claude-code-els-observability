@@ -1,0 +1,58 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.18.2
+    container_name: elasticsearch
+    environment:
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+      - ./elasticsearch/init-templates.sh:/usr/share/elasticsearch/init-templates.sh
+      - ./elasticsearch/docker-entrypoint.sh:/usr/share/elasticsearch/docker-entrypoint.sh
+    entrypoint: [ "/usr/share/elasticsearch/docker-entrypoint.sh" ]
+    networks:
+      - observability
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: otel-collector
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    ports:
+      - "4318:4318" # OTLP HTTP receiver
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otel-collector-config.yaml
+    depends_on:
+      - elasticsearch
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:10.4.18
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - elasticsearch
+    networks:
+      - observability
+
+volumes:
+  es_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  observability:
+    driver: bridge
